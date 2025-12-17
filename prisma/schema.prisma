@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VendorStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  VENDOR
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum VendorReportStatus {
+  ACTIVE
+  INACTIVE_DUE_TO_PLAN
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+type FeatureFlags {
+  key   String
+  value String
+}
+
+model Vendor {
+  id         String        @id @default(uuid())
+  name       String
+  status     VendorStatus  @default(PENDING)
+  plan       Plan?         @relation(fields: [planId], references: [id])
+  planId     String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  users      User[]
+  reports    VendorReport[]
+  subscriptions Subscription[]
+}
+
+model Plan {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  name         String
+  max_reports  Int
+  max_users    Int
+  featureFlags Json
+  vendors      Vendor[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Subscription {
+  id               String             @id @default(uuid())
+  vendor           Vendor             @relation(fields: [vendorId], references: [id])
+  vendorId         String
+  status           SubscriptionStatus
+  trial_end        DateTime?
+  current_period_end DateTime?
+  provider         String?
+  provider_customer_id String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model User {
+  id            String      @id @default(uuid())
+  email         String      @unique
+  password_hash String
+  role          UserRole
+  status        UserStatus @default(PENDING)
+  vendor        Vendor?     @relation(fields: [vendorId], references: [id])
+  vendorId      String?
+  last_login_at DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  sessions      UserSession[]
+  invites       Invite[]    @relation("UserInvites")
+  auditActions  AuditLog[]  @relation("AuditActor")
+}
+
+model UserSession {
+  id               String   @id @default(uuid())
+  user             User     @relation(fields: [userId], references: [id])
+  userId           String
+  session_token_hash String @unique
+  createdAt        DateTime @default(now())
+  expires_at       DateTime
+  revoked_at       DateTime?
+  ip               String?
+  user_agent       String?
+}
+
+model Invite {
+  id          String   @id @default(uuid())
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  vendorId    String
+  email       String
+  role        UserRole @default(VENDOR)
+  token_hash  String   @unique
+  expires_at  DateTime
+  accepted_at DateTime?
+  created_by  User     @relation("UserInvites", fields: [createdById], references: [id])
+  createdById String
+  created_at  DateTime @default(now())
+}
+
+model Report {
+  id                    String   @id @default(uuid())
+  name                  String
+  description           String
+  zoho_public_embed_url String
+  tags                  Json
+  is_active             Boolean @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  vendorReports         VendorReport[]
+}
+
+model VendorReport {
+  vendor   Vendor              @relation(fields: [vendorId], references: [id])
+  vendorId String
+  report   Report              @relation(fields: [reportId], references: [id])
+  reportId String
+  status   VendorReportStatus
+  assigned_at DateTime @default(now())
+
+  @@id([vendorId, reportId])
+  @@index([vendorId])
+  @@index([reportId])
+}
+
+model AccessLog {
+  id         String   @id @default(uuid())
+  user_id    String
+  vendor_id  String
+  report_id  String?
+  event_type String
+  timestamp  DateTime @default(now())
+  ip         String?
+  user_agent String?
+
+  @@index([timestamp])
+  @@index([vendor_id])
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  actor          User     @relation("AuditActor", fields: [actor_user_id], references: [id])
+  actor_user_id  String
+  vendor_id      String?
+  action         String
+  target_type    String
+  target_id      String?
+  metadata       Json
+  timestamp      DateTime @default(now())
+
+  @@index([timestamp])
+}
+
+model Setting {
+  id                    String @id @default(uuid())
+  allowed_iframe_domains Json
+  support_email         String
+  branding              Json
+}
