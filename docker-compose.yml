@@ -1,0 +1,24 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  web:
+    build: .
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/portal
+      COOKIE_SECRET: supersecretcookievalue
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    command: sh -c "npx prisma migrate deploy && npm run start"
+volumes:
+  pgdata:
